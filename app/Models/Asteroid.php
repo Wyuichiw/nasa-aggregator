@@ -9,11 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 class Asteroid extends Model
 {
     protected $fillable = [
-        'nasa_reference_id',
-        'name',
-        'estimated_diameter_min_m',
-        'estimated_diameter_max_m',
-        'is_potentially_hazardous',
+        'nasa_reference_id', 'name', 'estimated_diameter_min_m',
+        'estimated_diameter_max_m', 'is_potentially_hazardous',
         'calculated_hazard_index',
     ];
 
@@ -30,5 +27,11 @@ class Asteroid extends Model
     public function closeApproachEvents(): HasMany
     {
         return $this->hasMany(CloseApproachEvent::class);
+    }
+
+    public function watchers(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'user_watchlist')
+            ->withPivot('id', 'notes')->withTimestamps();
     }
 }
