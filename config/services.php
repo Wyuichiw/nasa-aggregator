@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'nasa' => [
+        'key' => env('NASA_API_KEY'),
+        'base_url' => env('NASA_API_BASE_URL', 'https://api.nasa.gov'),
+    ],
+
 ];
