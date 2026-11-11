@@ -3,13 +3,14 @@
 namespace App\Services;
 
 use App\Models\Asteroid;
-use Illuminate\Support\Facades\DB;
 use App\Models\CloseApproachEvent;
+use Illuminate\Support\Facades\DB;
 
 class NasaImportService
 {
     public function __construct(
-        private readonly NasaApiService $nasaApiService
+        private readonly NasaApiService $nasaApiService,
+        private readonly AsteroidHazardUpdater $hazardUpdater
     ) {}
 
     public function importAsteroids(
@@ -31,8 +32,7 @@ class NasaImportService
                 'name' => $asteroid->name,
                 'estimated_diameter_min_m' => $asteroid->diameterMin,
                 'estimated_diameter_max_m' => $asteroid->diameterMax,
-                'is_potentially_hazardous' =>
-                    $asteroid->isPotentiallyHazardous,
+                'is_potentially_hazardous' => $asteroid->isPotentiallyHazardous,
                 'created_at' => now(),
                 'updated_at' => now(),
             ];
@@ -92,6 +92,11 @@ class NasaImportService
                     'miss_distance_km',
                     'updated_at',
                 ]
+            );
+
+            // Перераховуємо Hazard Score після збереження зближень
+            $this->hazardUpdater->update(
+                $asteroidIds->values()->all()
             );
         });
 

@@ -6,8 +6,10 @@ use App\DTO\AsteroidData;
 use App\DTO\CloseApproachData;
 use App\Models\Asteroid;
 use App\Models\CloseApproachEvent;
+use App\Services\AsteroidHazardUpdater;
 use App\Services\NasaApiService;
 use App\Services\NasaImportService;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Tests\TestCase;
@@ -261,7 +263,193 @@ class NasaImportServiceTest extends TestCase
             );
 
             $this->fail('Expected a database exception.');
-        } catch (\Illuminate\Database\QueryException $exception) {
+        } catch (QueryException $exception) {
+            $this->assertDatabaseCount('asteroids', 0);
+            $this->assertDatabaseCount('close_approach_events', 0);
+        }
+    }
+
+    public function test_import_automatically_calculates_hazard_score(): void
+    {
+        $asteroid = new AsteroidData(
+            nasaReferenceId: '100010',
+            name: 'Hazard Test Asteroid',
+            diameterMin: 100.00,
+            diameterMax: 500.00,
+            isPotentiallyHazardous: false,
+        );
+
+        $approach = new CloseApproachData(
+            date: '2026-11-10',
+            datetime: '2026-11-10 12:00:00',
+            velocityKmh: 50000.00,
+            distanceKm: 1000000.00,
+            orbitingBody: 'Earth',
+        );
+
+        $nasaApi = Mockery::mock(NasaApiService::class);
+
+        $nasaApi->shouldReceive('getAsteroids')
+            ->once()
+            ->with('2026-11-10', '2026-11-10')
+            ->andReturn([
+                [
+                    'asteroid' => $asteroid,
+                    'approach' => $approach,
+                ],
+            ]);
+
+        $this->app->instance(NasaApiService::class, $nasaApi);
+
+        app(NasaImportService::class)->importAsteroids(
+            '2026-11-10',
+            '2026-11-10'
+        );
+
+        $savedAsteroid = Asteroid::firstOrFail();
+
+        $this->assertSame(
+            50.0,
+            (float) $savedAsteroid->calculated_hazard_index
+        );
+
+        $this->assertDatabaseCount('close_approach_events', 1);
+    }
+
+    public function test_reimport_recalculates_hazard_score(): void
+    {
+        $asteroid = new AsteroidData(
+            nasaReferenceId: '100011',
+            name: 'Updated Hazard Asteroid',
+            diameterMin: 100.00,
+            diameterMax: 500.00,
+            isPotentiallyHazardous: false,
+        );
+
+        $originalApproach = new CloseApproachData(
+            date: '2026-11-10',
+            datetime: '2026-11-10 12:00:00',
+            velocityKmh: 50000.00,
+            distanceKm: 1000000.00,
+            orbitingBody: 'Earth',
+        );
+
+        $updatedApproach = new CloseApproachData(
+            date: '2026-11-10',
+            datetime: '2026-11-10 12:00:00',
+            velocityKmh: 50000.00,
+            distanceKm: 250000.00,
+            orbitingBody: 'Earth',
+        );
+
+        $nasaApi = Mockery::mock(NasaApiService::class);
+
+        $nasaApi->shouldReceive('getAsteroids')
+            ->twice()
+            ->andReturn(
+                [
+                    [
+                        'asteroid' => $asteroid,
+                        'approach' => $originalApproach,
+                    ],
+                ],
+                [
+                    [
+                        'asteroid' => $asteroid,
+                        'approach' => $updatedApproach,
+                    ],
+                ]
+            );
+
+        $this->app->instance(NasaApiService::class, $nasaApi);
+
+        $importService = app(NasaImportService::class);
+
+        $importService->importAsteroids(
+            '2026-11-10',
+            '2026-11-10'
+        );
+
+        $savedAsteroid = Asteroid::firstOrFail();
+
+        $this->assertSame(
+            50.0,
+            (float) $savedAsteroid->calculated_hazard_index
+        );
+
+        $importService->importAsteroids(
+            '2026-11-10',
+            '2026-11-10'
+        );
+
+        $updatedAsteroid = $savedAsteroid->fresh();
+
+        // D=0.5, V=0.5, R=1/(1+0.25)=0.8
+        // H=100*(0.30*0.5+0.25*0.5+0.45*0.8)=63.5
+        $this->assertSame(
+            63.5,
+            (float) $updatedAsteroid->calculated_hazard_index
+        );
+
+        $this->assertSame(1, Asteroid::count());
+        $this->assertSame(1, CloseApproachEvent::count());
+    }
+
+    public function test_import_rolls_back_when_hazard_calculation_fails(): void
+    {
+        $asteroid = new AsteroidData(
+            nasaReferenceId: '900001',
+            name: 'Rollback Hazard Test',
+            diameterMin: 100.00,
+            diameterMax: 500.00,
+            isPotentiallyHazardous: false,
+        );
+
+        $approach = new CloseApproachData(
+            date: '2026-11-10',
+            datetime: '2026-11-10 12:00:00',
+            velocityKmh: 50000.00,
+            distanceKm: 1000000.00,
+            orbitingBody: 'Earth',
+        );
+
+        $nasaApi = Mockery::mock(NasaApiService::class);
+
+        $nasaApi->shouldReceive('getAsteroids')
+            ->once()
+            ->andReturn([
+                [
+                    'asteroid' => $asteroid,
+                    'approach' => $approach,
+                ],
+            ]);
+
+        $this->app->instance(NasaApiService::class, $nasaApi);
+
+        // Імітуємо помилку під час обчислення Hazard Score
+        $hazardUpdater = Mockery::mock(
+            AsteroidHazardUpdater::class
+        );
+
+        $hazardUpdater->shouldReceive('update')
+            ->once()
+            ->andThrow(new \RuntimeException(
+                'Hazard calculation failed.'
+            ));
+
+        $this->app->instance(
+            AsteroidHazardUpdater::class,
+            $hazardUpdater
+        );
+
+        $this->expectException(\RuntimeException::class);
+
+        try {
+            app(NasaImportService::class)->importAsteroids(
+                '2026-11-10',
+                '2026-11-10'
+            );
+        } finally {
             $this->assertDatabaseCount('asteroids', 0);
             $this->assertDatabaseCount('close_approach_events', 0);
         }
