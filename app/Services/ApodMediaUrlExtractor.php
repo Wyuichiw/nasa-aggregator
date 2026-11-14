@@ -16,7 +16,7 @@ class ApodMediaUrlExtractor
         $previous = libxml_use_internal_errors(true);
 
         try {
-            $document = new DOMDocument();
+            $document = new DOMDocument;
             $document->loadHTML($html, LIBXML_NONET);
 
             $xpath = new DOMXPath($document);
@@ -26,14 +26,14 @@ class ApodMediaUrlExtractor
             );
 
             foreach ($nodes as $node) {
-                if (!$node instanceof \DOMElement) {
+                if (! $node instanceof \DOMElement) {
                     continue;
                 }
 
                 $url = trim($node->getAttribute('src'));
 
                 if (str_starts_with($url, '//')) {
-                    $url = 'https:' . $url;
+                    $url = 'https:'.$url;
                 }
 
                 if (filter_var($url, FILTER_VALIDATE_URL)

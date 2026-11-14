@@ -2,9 +2,12 @@
 
 namespace App\Services;
 
+use App\Jobs\DownloadNasaApodImage;
 use App\Models\Asteroid;
 use App\Models\CloseApproachEvent;
+use App\Models\NasaMedia;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class NasaImportService
 {
@@ -101,5 +104,49 @@ class NasaImportService
         });
 
         return count($asteroids);
+    }
+
+    public function importApod(string $date): NasaMedia
+    {
+        $apod = $this->nasaApiService->getApod($date);
+
+        return DB::transaction(function () use ($apod) {
+            $media = NasaMedia::query()->firstOrNew([
+                'media_date' => $apod->date,
+            ]);
+
+            $sourceChanged = $media->exists && (
+                $media->source_url !== $apod->sourceUrl ||
+                $media->media_type !== $apod->mediaType
+            );
+
+            $media->fill([
+                'title' => $apod->title,
+                'explanation' => $apod->explanation,
+                'media_type' => $apod->mediaType,
+                'source_url' => $apod->sourceUrl,
+                'copyright' => $apod->copyright,
+            ]);
+
+            if ($sourceChanged) {
+                $media->local_storage_path = null;
+            }
+
+            $media->save();
+
+            if (
+                $media->media_type === 'image' &&
+                (
+                    $media->local_storage_path === null ||
+                    ! Storage::disk('public')->exists(
+                        $media->local_storage_path
+                    )
+                )
+            ) {
+                DownloadNasaApodImage::dispatch($media)->afterCommit();
+            }
+
+            return $media;
+        });
     }
 }

@@ -2,15 +2,20 @@
 
 namespace Tests\Feature;
 
+use App\DTO\ApodData;
 use App\DTO\AsteroidData;
 use App\DTO\CloseApproachData;
+use App\Jobs\DownloadNasaApodImage;
 use App\Models\Asteroid;
 use App\Models\CloseApproachEvent;
+use App\Models\NasaMedia;
 use App\Services\AsteroidHazardUpdater;
 use App\Services\NasaApiService;
 use App\Services\NasaImportService;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Mockery;
 use Tests\TestCase;
 
@@ -453,5 +458,216 @@ class NasaImportServiceTest extends TestCase
             $this->assertDatabaseCount('asteroids', 0);
             $this->assertDatabaseCount('close_approach_events', 0);
         }
+    }
+
+    public function test_imports_apod_video_without_dispatching_image_job(): void
+    {
+        Queue::fake();
+
+        $api = Mockery::mock(
+            NasaApiService::class
+        );
+
+        $api->shouldReceive('getApod')
+            ->once()
+            ->with('2026-11-13')
+            ->andReturn(new ApodData(
+                date: '2026-11-13',
+                title: 'NASA Space Video',
+                explanation: 'An astronomy video.',
+                mediaType: 'video',
+                sourceUrl: 'https://www.youtube.com/watch?v=example123',
+                copyright: null,
+            ));
+
+        $this->app->instance(
+            NasaApiService::class,
+            $api
+        );
+
+        $media = app(NasaImportService::class)
+            ->importApod('2026-11-13');
+
+        $this->assertDatabaseHas('nasa_media', [
+            'id' => $media->id,
+            'title' => 'NASA Space Video',
+            'media_type' => 'video',
+            'source_url' => 'https://www.youtube.com/watch?v=example123',
+            'local_storage_path' => null,
+        ]);
+
+        Queue::assertNotPushed(
+            DownloadNasaApodImage::class
+        );
+    }
+
+    public function test_imports_apod_image_and_dispatches_download_job(): void
+    {
+        Queue::fake();
+        Storage::fake('public');
+
+        $api = Mockery::mock(
+            NasaApiService::class
+        );
+
+        $api->shouldReceive('getApod')
+            ->once()
+            ->with('2026-11-13')
+            ->andReturn(new ApodData(
+                date: '2026-11-13',
+                title: 'Galaxy Image',
+                explanation: 'A beautiful galaxy.',
+                mediaType: 'image',
+                sourceUrl: 'https://apod.nasa.gov/apod/image/2611/galaxy.jpg',
+                copyright: 'NASA',
+            ));
+
+        $this->app->instance(
+            NasaApiService::class,
+            $api
+        );
+
+        $media = app(NasaImportService::class)
+            ->importApod('2026-11-13');
+
+        $this->assertDatabaseHas('nasa_media', [
+            'id' => $media->id,
+            'title' => 'Galaxy Image',
+            'media_type' => 'image',
+            'source_url' => 'https://apod.nasa.gov/apod/image/2611/galaxy.jpg',
+            'copyright' => 'NASA',
+            'local_storage_path' => null,
+        ]);
+
+        Queue::assertPushed(
+            DownloadNasaApodImage::class,
+            1
+        );
+
+        Queue::assertPushed(
+            DownloadNasaApodImage::class,
+            fn ($job) => $job->nasaMedia->id === $media->id
+        );
+    }
+
+    public function test_reimporting_apod_with_existing_file_does_not_duplicate_or_dispatch(): void
+    {
+        Queue::fake();
+        Storage::fake('public');
+
+        $date = '2026-11-13';
+        $path = 'apod/2026-11-13.jpg';
+
+        Storage::disk('public')
+            ->put($path, 'existing image');
+
+        $existing = NasaMedia::create([
+            'media_date' => $date,
+            'title' => 'Old APOD title',
+            'explanation' => 'Old description.',
+            'media_type' => 'image',
+            'source_url' => 'https://apod.nasa.gov/old.jpg',
+            'local_storage_path' => $path,
+        ]);
+
+        $api = Mockery::mock(NasaApiService::class);
+
+        $api->shouldReceive('getApod')
+            ->once()
+            ->with($date)
+            ->andReturn(new ApodData(
+                date: $date,
+                title: 'Updated APOD title',
+                explanation: 'Updated description.',
+                mediaType: 'image',
+                sourceUrl: 'https://apod.nasa.gov/old.jpg',
+                copyright: null,
+            ));
+
+        $this->app->instance(
+            NasaApiService::class,
+            $api
+        );
+
+        $media = app(NasaImportService::class)
+            ->importApod($date);
+
+        $this->assertSame($existing->id, $media->id);
+
+        $this->assertDatabaseCount('nasa_media', 1);
+
+        $this->assertDatabaseHas('nasa_media', [
+            'id' => $existing->id,
+            'title' => 'Updated APOD title',
+            'local_storage_path' => $path,
+        ]);
+
+        Queue::assertNotPushed(
+            DownloadNasaApodImage::class
+        );
+    }
+
+    public function test_reimporting_apod_with_changed_url_schedules_new_download(): void
+    {
+        Queue::fake();
+        Storage::fake('public');
+
+        $date = '2026-11-13';
+        $oldPath = 'apod/2026-11-13.jpg';
+
+        Storage::disk('public')->put(
+            $oldPath,
+            'existing image'
+        );
+
+        $existing = NasaMedia::create([
+            'media_date' => $date,
+            'title' => 'Old Galaxy',
+            'explanation' => 'Original description.',
+            'media_type' => 'image',
+            'source_url' => 'https://apod.nasa.gov/old.jpg',
+            'local_storage_path' => $oldPath,
+        ]);
+
+        $api = Mockery::mock(NasaApiService::class);
+
+        $api->shouldReceive('getApod')
+            ->once()
+            ->with($date)
+            ->andReturn(new ApodData(
+                date: $date,
+                title: 'Updated Galaxy',
+                explanation: 'Updated description.',
+                mediaType: 'image',
+                sourceUrl: 'https://apod.nasa.gov/new.jpg',
+                copyright: 'NASA',
+            ));
+
+        $this->app->instance(
+            NasaApiService::class,
+            $api
+        );
+
+        $media = app(NasaImportService::class)
+            ->importApod($date);
+
+        $this->assertSame($existing->id, $media->id);
+
+        $this->assertDatabaseCount('nasa_media', 1);
+
+        $this->assertDatabaseHas('nasa_media', [
+            'id' => $existing->id,
+            'title' => 'Updated Galaxy',
+            'source_url' => 'https://apod.nasa.gov/new.jpg',
+            'local_storage_path' => null,
+        ]);
+
+        Queue::assertPushed(
+            DownloadNasaApodImage::class,
+            1
+        );
+
+        Storage::disk('public')
+            ->assertExists($oldPath);
     }
 }

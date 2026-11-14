@@ -2,14 +2,14 @@
 
 namespace App\Services;
 
+use App\DTO\ApodData;
 use App\DTO\AsteroidData;
+use App\DTO\AsteroidDetailsData;
 use App\DTO\CloseApproachData;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use RuntimeException;
-use App\DTO\ApodData;
-use App\DTO\AsteroidDetailsData;
 
 class NasaApiService
 {
@@ -21,8 +21,8 @@ class NasaApiService
         $end = CarbonImmutable::createFromFormat('!Y-m-d', $endDate);
 
         if (
-            !$start ||
-            !$end ||
+            ! $start ||
+            ! $end ||
             $start->format('Y-m-d') !== $startDate ||
             $end->format('Y-m-d') !== $endDate ||
             $start->greaterThan($end) ||
@@ -35,7 +35,7 @@ class NasaApiService
 
         $response = Http::timeout(20)->get(
             rtrim(config('services.nasa.base_url'), '/')
-            . '/neo/rest/v1/feed',
+            .'/neo/rest/v1/feed',
             [
                 'start_date' => $startDate,
                 'end_date' => $endDate,
@@ -49,16 +49,16 @@ class NasaApiService
             );
         }
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             throw new RuntimeException(
                 'NASA API request failed. HTTP '
-                . $response->status()
+                .$response->status()
             );
         }
 
         $objects = $response->json('near_earth_objects');
 
-        if (!is_array($objects)) {
+        if (! is_array($objects)) {
             throw new RuntimeException(
                 'Invalid NASA NeoWs response.'
             );
@@ -67,14 +67,14 @@ class NasaApiService
         $result = [];
 
         foreach ($objects as $date => $asteroids) {
-            if (!is_array($asteroids)) {
+            if (! is_array($asteroids)) {
                 throw new RuntimeException(
                     'Invalid NASA asteroid list.'
                 );
             }
 
             foreach ($asteroids as $asteroid) {
-                if (!is_array($asteroid)) {
+                if (! is_array($asteroid)) {
                     throw new RuntimeException(
                         'Invalid NASA asteroid entry.'
                     );
@@ -82,7 +82,7 @@ class NasaApiService
 
                 $asteroidData = AsteroidData::fromArray($asteroid);
 
-                if (!array_key_exists('close_approach_data', $asteroid)) {
+                if (! array_key_exists('close_approach_data', $asteroid)) {
                     throw new RuntimeException(
                         'Missing NASA close approach data.'
                     );
@@ -90,14 +90,14 @@ class NasaApiService
 
                 $approaches = $asteroid['close_approach_data'];
 
-                if (!is_array($approaches) || !array_is_list($approaches)) {
+                if (! is_array($approaches) || ! array_is_list($approaches)) {
                     throw new RuntimeException(
                         'Invalid NASA close approach list.'
                     );
                 }
 
                 foreach ($approaches as $approach) {
-                    if (!is_array($approach)) {
+                    if (! is_array($approach)) {
                         throw new RuntimeException(
                             'Invalid NASA close approach entry.'
                         );
@@ -121,7 +121,52 @@ class NasaApiService
         );
     }
 
-    public function getLatestApod(): ApodData {
+    public function getApod(string $date): ApodData
+    {
+        $parsed = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+
+        if (
+            $parsed === false ||
+            $parsed->format('Y-m-d') !== $date
+        ) {
+            throw new InvalidArgumentException(
+                'Invalid NASA APOD date.'
+            );
+        }
+
+        $dateCode = $parsed->format('ymd');
+
+        $response = Http::timeout(20)->get(
+            'https://science.nasa.gov/wp-json/wp/v2/apod-basic/'
+            .$dateCode
+        );
+
+        if ($response->status() === 429) {
+            throw new RuntimeException(
+                'NASA APOD API rate limit exceeded.'
+            );
+        }
+
+        if (! $response->successful()) {
+            throw new RuntimeException(
+                'NASA APOD API request failed. HTTP '
+                .$response->status()
+            );
+        }
+
+        $data = $response->json();
+
+        if (! is_array($data) || array_is_list($data)) {
+            throw new RuntimeException(
+                'Invalid NASA APOD response.'
+            );
+        }
+
+        return ApodData::fromArray($data);
+    }
+
+    public function getLatestApod(): ApodData
+    {
         $response = Http::timeout(20)->get(
             'https://science.nasa.gov/wp-json/wp/v2/apod-basic',
             [
@@ -135,19 +180,19 @@ class NasaApiService
             );
         }
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             throw new RuntimeException(
                 'NASA APOD API request failed. HTTP '
-                . $response->status()
+                .$response->status()
             );
         }
 
         $data = $response->json();
 
         if (
-            !is_array($data) ||
-            !isset($data[0]) ||
-            !is_array($data[0])
+            ! is_array($data) ||
+            ! isset($data[0]) ||
+            ! is_array($data[0])
         ) {
             throw new RuntimeException(
                 'Invalid NASA APOD response.'
@@ -166,7 +211,7 @@ class NasaApiService
 
     private function fetchAsteroidDetails(string $asteroidId): array
     {
-        if ($asteroidId === '' || !ctype_digit($asteroidId)) {
+        if ($asteroidId === '' || ! ctype_digit($asteroidId)) {
             throw new InvalidArgumentException(
                 'Invalid NASA asteroid ID.'
             );
@@ -174,7 +219,7 @@ class NasaApiService
 
         $response = Http::timeout(20)->get(
             rtrim(config('services.nasa.base_url'), '/')
-            . '/neo/rest/v1/neo/' . $asteroidId,
+            .'/neo/rest/v1/neo/'.$asteroidId,
             [
                 'api_key' => config('services.nasa.key'),
             ]
@@ -186,16 +231,16 @@ class NasaApiService
             );
         }
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             throw new RuntimeException(
                 'NASA API request failed. HTTP '
-                . $response->status()
+                .$response->status()
             );
         }
 
         $data = $response->json();
 
-        if (!is_array($data)) {
+        if (! is_array($data)) {
             throw new RuntimeException(
                 'Invalid NASA asteroid details response.'
             );
