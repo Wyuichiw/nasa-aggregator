@@ -27,4 +27,31 @@ class NasaSchedulerTest extends TestCase
 
         $this->assertSame('UTC', $event->timezone);
     }
+
+    public function test_daily_apod_import_is_scheduled(): void
+    {
+        $events = \Illuminate\Support\Facades\Schedule::events();
+
+        $apodEvent = collect($events)->first(
+            fn ($event) => str_contains(
+                $event->command ?? '',
+                'nasa:fetch-apod'
+            )
+        );
+
+        $this->assertNotNull(
+            $apodEvent,
+            'NASA APOD import must be scheduled.'
+        );
+
+        $this->assertSame(
+            '0 9 * * *',
+            $apodEvent->expression
+        );
+
+        $this->assertSame(
+            'UTC',
+            $apodEvent->timezone
+        );
+    }
 }

@@ -2,7 +2,13 @@
 
 namespace Tests\Feature;
 
+use App\DTO\ApodData;
+use App\DTO\AsteroidData;
+use App\DTO\AsteroidDetailsData;
+use App\DTO\CloseApproachData;
+use App\DTO\OrbitalData;
 use App\Services\NasaApiService;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
 use Tests\TestCase;
@@ -60,7 +66,7 @@ class NasaApiServiceTest extends TestCase
             ->getAsteroidDetails('2307493');
 
         $this->assertInstanceOf(
-            \App\DTO\AsteroidData::class,
+            AsteroidData::class,
             $asteroid
         );
 
@@ -106,7 +112,7 @@ class NasaApiServiceTest extends TestCase
         $apod = app(NasaApiService::class)->getLatestApod();
 
         $this->assertInstanceOf(
-            \App\DTO\ApodData::class,
+            ApodData::class,
             $apod
         );
 
@@ -166,7 +172,7 @@ class NasaApiServiceTest extends TestCase
         ]);
 
         $this->expectException(
-            \Illuminate\Http\Client\ConnectionException::class
+            ConnectionException::class
         );
 
         app(NasaApiService::class)->getAsteroidDetails('2307493');
@@ -191,9 +197,9 @@ class NasaApiServiceTest extends TestCase
         Http::assertSent(function ($request) {
             return $request->url() ===
                 'https://api.nasa.gov/neo/rest/v1/feed'
-                . '?start_date=2026-11-01'
-                . '&end_date=2026-11-07'
-                . '&api_key=' . config('services.nasa.key');
+                .'?start_date=2026-11-01'
+                .'&end_date=2026-11-07'
+                .'&api_key='.config('services.nasa.key');
         });
     }
 
@@ -238,7 +244,7 @@ class NasaApiServiceTest extends TestCase
             ->getFullAsteroidDetails('2307493');
 
         $this->assertInstanceOf(
-            \App\DTO\AsteroidDetailsData::class,
+            AsteroidDetailsData::class,
             $details
         );
 
@@ -282,7 +288,7 @@ class NasaApiServiceTest extends TestCase
         $apod = app(NasaApiService::class)->getLatestApod();
 
         $this->assertInstanceOf(
-            \App\DTO\ApodData::class,
+            ApodData::class,
             $apod
         );
 
@@ -319,7 +325,7 @@ class NasaApiServiceTest extends TestCase
         $apod = app(NasaApiService::class)->getLatestApod();
 
         $this->assertInstanceOf(
-            \App\DTO\ApodData::class,
+            ApodData::class,
             $apod
         );
 
@@ -333,7 +339,7 @@ class NasaApiServiceTest extends TestCase
 
     public function test_accepts_hyperbolic_orbital_data(): void
     {
-        $orbit = \App\DTO\OrbitalData::fromArray([
+        $orbit = OrbitalData::fromArray([
             'eccentricity' => '1.25',
             'inclination' => '45.5',
             'semi_major_axis' => '-2.5',
@@ -363,7 +369,7 @@ class NasaApiServiceTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        \App\DTO\OrbitalData::fromArray([
+        OrbitalData::fromArray([
             'eccentricity' => '1.25',
             'inclination' => '45.5',
             'semi_major_axis' => '2.5',
@@ -477,7 +483,7 @@ class NasaApiServiceTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        \App\DTO\AsteroidData::fromArray([
+        AsteroidData::fromArray([
             'id' => '2307493',
             'name' => 'Test Asteroid',
             'estimated_diameter' => [
@@ -494,7 +500,7 @@ class NasaApiServiceTest extends TestCase
     {
         $this->expectException(InvalidArgumentException::class);
 
-        \App\DTO\AsteroidData::fromArray([
+        AsteroidData::fromArray([
             'id' => '2307493',
             'name' => 'Test Asteroid',
             'estimated_diameter' => [
@@ -514,7 +520,7 @@ class NasaApiServiceTest extends TestCase
             'Invalid NASA close approach date.'
         );
 
-        \App\DTO\CloseApproachData::fromArray([
+        CloseApproachData::fromArray([
             'close_approach_date' => '2026-02-31',
             'epoch_date_close_approach' => 1772496000000,
             'relative_velocity' => [
@@ -612,12 +618,12 @@ class NasaApiServiceTest extends TestCase
         $this->assertCount(1, $result);
 
         $this->assertInstanceOf(
-            \App\DTO\AsteroidData::class,
+            AsteroidData::class,
             $result[0]['asteroid']
         );
 
         $this->assertInstanceOf(
-            \App\DTO\CloseApproachData::class,
+            CloseApproachData::class,
             $result[0]['approach']
         );
 
@@ -651,7 +657,7 @@ class NasaApiServiceTest extends TestCase
 
     public function test_accepts_elliptical_orbital_data(): void
     {
-        $orbit = \App\DTO\OrbitalData::fromArray([
+        $orbit = OrbitalData::fromArray([
             'eccentricity' => '0.5857299389',
             'inclination' => '23.1151895885',
             'semi_major_axis' => '2.0796148112',
@@ -680,5 +686,91 @@ class NasaApiServiceTest extends TestCase
         );
 
         $this->assertSame('APO', $orbit->orbitClass);
+    }
+
+    public function test_apod_image_uses_regular_url_when_hdurl_is_missing(): void
+    {
+        $apod = ApodData::fromArray([
+            'date' => '2026-11-13',
+            'title' => 'Galaxy',
+            'explanation' => 'A distant galaxy.',
+            'media_type' => 'image',
+            'url' => 'https://apod.nasa.gov/apod/image/2611/galaxy.jpg',
+        ]);
+
+        $this->assertSame(
+            'https://apod.nasa.gov/apod/image/2611/galaxy.jpg',
+            $apod->sourceUrl
+        );
+
+        $this->assertSame('image', $apod->mediaType);
+    }
+
+    public function test_apod_video_accepts_direct_youtube_url(): void
+    {
+        $apod = ApodData::fromArray([
+            'date' => '2026-11-13',
+            'title' => 'Space video',
+            'explanation' => 'An astronomy video.',
+            'media_type' => 'video',
+            'url' => 'https://www.youtube.com/watch?v=example123',
+        ]);
+
+        $this->assertSame(
+            'https://www.youtube.com/watch?v=example123',
+            $apod->sourceUrl
+        );
+
+        $this->assertSame('video', $apod->mediaType);
+    }
+
+    public function test_gets_apod_for_specific_date(): void
+    {
+        Http::fake([
+            'science.nasa.gov/*' => Http::response([
+                'date' => '2026-11-13',
+                'title' => 'The Milky Way',
+                'explanation' => 'A view of our galaxy.',
+                'media_type' => 'image',
+                'hdurl' => 'https://apod.nasa.gov/apod/image/2611/galaxy.jpg',
+            ], 200),
+        ]);
+
+        $apod = app(NasaApiService::class)
+            ->getApod('2026-11-13');
+
+        $this->assertSame('2026-11-13', $apod->date);
+        $this->assertSame('The Milky Way', $apod->title);
+        $this->assertSame('image', $apod->mediaType);
+
+        Http::assertSent(
+            fn ($request) => str_contains(
+                $request->url(),
+                '/wp-json/wp/v2/apod-basic/261113'
+            )
+        );
+    }
+
+    public function test_get_apod_rejects_invalid_date(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        app(NasaApiService::class)
+            ->getApod('2026-02-30');
+    }
+
+    public function test_get_apod_handles_server_error(): void
+    {
+        Http::fake([
+            'science.nasa.gov/*' => Http::response(
+                [],
+                500
+            ),
+        ]);
+
+        $this->expectException(\RuntimeException::class);
+
+        app(NasaApiService::class)
+            ->getApod('2026-11-13');
     }
 }

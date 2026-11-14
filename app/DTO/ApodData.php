@@ -25,38 +25,48 @@ readonly class ApodData
         $mediaType = $data['media_type'] ?? null;
 
         if (
-            !is_string($date) ||
-            !self::isValidDate($date) ||
-            !is_string($title) ||
+            ! is_string($date) ||
+            ! self::isValidDate($date) ||
+            ! is_string($title) ||
             trim($title) === '' ||
-            !is_string($explanation) ||
+            ! is_string($explanation) ||
             trim($explanation) === '' ||
-            !in_array($mediaType, ['image', 'video'], true)
+            ! in_array($mediaType, ['image', 'video'], true)
         ) {
             throw new InvalidArgumentException(
                 'Invalid NASA APOD data.'
             );
         }
 
-        // У новому APOD API поле url може вести на сторінку NASA.
-        // Для фотографій використовуємо прямий URL із hdurl.
-        $sourceUrl = $mediaType === 'image'
-            ? ($data['hdurl'] ?? null)
-            : ApodMediaUrlExtractor::extract(
-                is_string($data['basic_html'] ?? null)
-                    ? $data['basic_html']
-                    : ''
-            );
+        if ($mediaType === 'image') {
+            $sourceUrl = $data['hdurl'] ?? null;
 
-        if (
-            !is_string($sourceUrl) ||
-            !filter_var($sourceUrl, FILTER_VALIDATE_URL) ||
-            !in_array(
-                parse_url($sourceUrl, PHP_URL_SCHEME),
-                ['http', 'https'],
-                true
-            )
-        ) {
+            if (! self::isValidUrl($sourceUrl)) {
+                $candidateUrl = $data['url'] ?? null;
+
+                $sourceUrl = self::isDirectImageUrl($candidateUrl)
+                    ? $candidateUrl
+                    : null;
+            }
+        } else {
+            $sourceUrl = null;
+
+            $basicHtml = $data['basic_html'] ?? null;
+
+            if (is_string($basicHtml) && trim($basicHtml) !== '') {
+                $sourceUrl = ApodMediaUrlExtractor::extract($basicHtml);
+            }
+
+            if (! self::isValidUrl($sourceUrl)) {
+                $candidateUrl = $data['url'] ?? null;
+
+                $sourceUrl = self::isDirectVideoUrl($candidateUrl)
+                    ? $candidateUrl
+                    : null;
+            }
+        }
+
+        if (! self::isValidUrl($sourceUrl)) {
             throw new InvalidArgumentException(
                 'Invalid NASA APOD media URL.'
             );
@@ -66,7 +76,7 @@ readonly class ApodData
             ?? $data['credit']
             ?? null;
 
-        if ($copyright !== null && !is_string($copyright)) {
+        if ($copyright !== null && ! is_string($copyright)) {
             throw new InvalidArgumentException(
                 'Invalid NASA APOD copyright.'
             );
@@ -79,6 +89,60 @@ readonly class ApodData
             mediaType: $mediaType,
             sourceUrl: $sourceUrl,
             copyright: $copyright,
+        );
+    }
+
+    private static function isValidUrl(mixed $url): bool
+    {
+        return is_string($url)
+            && filter_var($url, FILTER_VALIDATE_URL) !== false
+            && in_array(
+                parse_url($url, PHP_URL_SCHEME),
+                ['http', 'https'],
+                true
+            );
+    }
+
+    private static function isDirectImageUrl(mixed $url): bool
+    {
+        if (! self::isValidUrl($url)) {
+            return false;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH);
+
+        return is_string($path)
+            && preg_match(
+                '/\.(jpg|jpeg|png|gif|webp|tif|tiff)$/i',
+                $path
+            ) === 1;
+    }
+
+    private static function isDirectVideoUrl(mixed $url): bool
+    {
+        if (! self::isValidUrl($url)) {
+            return false;
+        }
+
+        $path = parse_url($url, PHP_URL_PATH);
+        $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+
+        if (
+            is_string($path)
+            && preg_match('/\.(mp4|webm|mov)$/i', $path) === 1
+        ) {
+            return true;
+        }
+
+        return in_array(
+            $host,
+            [
+                'www.youtube.com',
+                'youtube.com',
+                'youtu.be',
+                'player.vimeo.com',
+            ],
+            true
         );
     }
 

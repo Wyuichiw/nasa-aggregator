@@ -12,3 +12,8 @@ Schedule::command('nasa:fetch-asteroids --days=7')
     ->name('nasa-asteroids-daily-import')
     ->dailyAt('03:00')
     ->timezone('UTC');
+
+Schedule::command('nasa:fetch-apod')
+    ->dailyAt('09:00')
+    ->timezone('UTC')
+    ->withoutOverlapping();
