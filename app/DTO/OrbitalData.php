@@ -23,11 +23,11 @@ readonly class OrbitalData
         $orbitClass = $data['orbit_class']['orbit_class_type'] ?? null;
 
         if (
-            !is_numeric($eccentricity) ||
-            !is_numeric($inclination) ||
-            !is_numeric($semiMajorAxis) ||
-            ($orbitalPeriod !== null && !is_numeric($orbitalPeriod)) ||
-            !is_string($orbitClass) ||
+            ! is_numeric($eccentricity) ||
+            ! is_numeric($inclination) ||
+            ! is_numeric($semiMajorAxis) ||
+            ($orbitalPeriod !== null && ! is_numeric($orbitalPeriod)) ||
+            ! is_string($orbitClass) ||
             trim($orbitClass) === ''
         ) {
             throw new InvalidArgumentException(
@@ -43,10 +43,10 @@ readonly class OrbitalData
             : null;
 
         if (
-            !is_finite($eccentricity) ||
-            !is_finite($inclination) ||
-            !is_finite($semiMajorAxis) ||
-            ($orbitalPeriod !== null && !is_finite($orbitalPeriod)) ||
+            ! is_finite($eccentricity) ||
+            ! is_finite($inclination) ||
+            ! is_finite($semiMajorAxis) ||
+            ($orbitalPeriod !== null && ! is_finite($orbitalPeriod)) ||
             $eccentricity < 0 ||
             $inclination < 0 ||
             $inclination > 180

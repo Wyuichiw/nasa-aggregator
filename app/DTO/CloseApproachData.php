@@ -25,12 +25,12 @@ readonly class CloseApproachData
         $orbitingBody = $data['orbiting_body'] ?? null;
 
         if (
-            !is_string($date) ||
-            !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) ||
-            !is_numeric($epoch) ||
-            !is_numeric($velocity) ||
-            !is_numeric($distance) ||
-            !is_string($orbitingBody) ||
+            ! is_string($date) ||
+            ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) ||
+            ! is_numeric($epoch) ||
+            ! is_numeric($velocity) ||
+            ! is_numeric($distance) ||
+            ! is_string($orbitingBody) ||
             trim($orbitingBody) === ''
         ) {
             throw new InvalidArgumentException(
@@ -40,7 +40,7 @@ readonly class CloseApproachData
 
         $dateParts = explode('-', $date);
 
-        if (!checkdate(
+        if (! checkdate(
             (int) $dateParts[1],
             (int) $dateParts[2],
             (int) $dateParts[0]

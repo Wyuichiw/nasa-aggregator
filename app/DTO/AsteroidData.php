@@ -13,19 +13,18 @@ readonly class AsteroidData
         public ?float $diameterMax,
         public bool $isPotentiallyHazardous,
     ) {}
-    
 
     public static function fromArray(array $data): self
     {
         if (
-            !isset($data['id']) ||
-            !is_string($data['id']) ||
-            !ctype_digit($data['id']) ||
-            !isset($data['name']) ||
-            !is_string($data['name']) ||
+            ! isset($data['id']) ||
+            ! is_string($data['id']) ||
+            ! ctype_digit($data['id']) ||
+            ! isset($data['name']) ||
+            ! is_string($data['name']) ||
             trim($data['name']) === '' ||
-            !isset($data['is_potentially_hazardous_asteroid']) ||
-            !is_bool($data['is_potentially_hazardous_asteroid'])
+            ! isset($data['is_potentially_hazardous_asteroid']) ||
+            ! is_bool($data['is_potentially_hazardous_asteroid'])
         ) {
             throw new InvalidArgumentException(
                 'Invalid NASA asteroid data.'
@@ -38,8 +37,8 @@ readonly class AsteroidData
         $max = $diameter['estimated_diameter_max'] ?? null;
 
         if (
-            ($min !== null && !is_numeric($min)) ||
-            ($max !== null && !is_numeric($max))
+            ($min !== null && ! is_numeric($min)) ||
+            ($max !== null && ! is_numeric($max))
         ) {
             throw new InvalidArgumentException(
                 'Invalid asteroid diameter.'
@@ -48,10 +47,10 @@ readonly class AsteroidData
 
         if (
             ($min !== null && (
-                !is_finite((float) $min) || (float) $min < 0
+                ! is_finite((float) $min) || (float) $min < 0
             )) ||
             ($max !== null && (
-                !is_finite((float) $max) || (float) $max < 0
+                ! is_finite((float) $max) || (float) $max < 0
             )) ||
             ($min !== null && $max !== null &&
                 (float) $min > (float) $max)
