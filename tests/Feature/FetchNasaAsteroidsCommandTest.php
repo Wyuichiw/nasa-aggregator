@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Jobs\ImportNasaAsteroids;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -13,7 +14,7 @@ class FetchNasaAsteroidsCommandTest extends TestCase
         Queue::fake();
 
         $this->travelTo(
-            \Carbon\CarbonImmutable::parse('2026-11-11 12:00:00', 'UTC')
+            CarbonImmutable::parse('2026-11-11 12:00:00', 'UTC')
         );
 
         $this->artisan('nasa:fetch-asteroids')
@@ -35,7 +36,7 @@ class FetchNasaAsteroidsCommandTest extends TestCase
         Queue::fake();
 
         $this->travelTo(
-            \Carbon\CarbonImmutable::parse('2026-11-11 12:00:00', 'UTC')
+            CarbonImmutable::parse('2026-11-11 12:00:00', 'UTC')
         );
 
         $this->artisan('nasa:fetch-asteroids', [

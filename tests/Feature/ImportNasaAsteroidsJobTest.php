@@ -4,11 +4,9 @@ namespace Tests\Feature;
 
 use App\Jobs\ImportNasaAsteroids;
 use App\Services\NasaImportService;
+use Illuminate\Support\Facades\Queue;
 use Mockery;
 use Tests\TestCase;
-use Illuminate\Support\Facades\Queue;
-
-
 
 class ImportNasaAsteroidsJobTest extends TestCase
 {
