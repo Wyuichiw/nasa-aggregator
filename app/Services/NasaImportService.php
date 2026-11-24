@@ -6,8 +6,10 @@ use App\Jobs\DownloadNasaApodImage;
 use App\Models\Asteroid;
 use App\Models\CloseApproachEvent;
 use App\Models\NasaMedia;
+use App\Models\Tag;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class NasaImportService
 {
@@ -133,6 +135,36 @@ class NasaImportService
             }
 
             $media->save();
+
+            // Автоматичне визначення тегів за назвою та описом APOD.
+            $text = Str::lower(
+                $media->title.' '.$media->explanation
+            );
+
+            $tagPatterns = [
+                'Mars' => '/\b(mars|martian)\b/u',
+                'Galaxy' => '/\b(galaxy|galaxies|galactic)\b/u',
+                'Telescopes' => '/\b(telescope|telescopes)\b/u',
+                'Moon' => '/\b(moon|lunar)\b/u',
+                'Nebula' => '/\b(nebula|nebulae)\b/u',
+            ];
+
+            $matchedTags = [];
+
+            foreach ($tagPatterns as $tagName => $pattern) {
+                if (preg_match($pattern, $text)) {
+                    $matchedTags[] = $tagName;
+                }
+            }
+
+            if ($matchedTags !== []) {
+                $tagIds = Tag::query()
+                    ->whereIn('name', $matchedTags)
+                    ->pluck('id')
+                    ->all();
+
+                $media->tags()->syncWithoutDetaching($tagIds);
+            }
 
             if (
                 $media->media_type === 'image' &&

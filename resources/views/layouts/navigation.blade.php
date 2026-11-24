@@ -11,10 +11,19 @@
                 </div>
 
                 <!-- Navigation Links -->
-                <div class="hidden space-x-8 sm:-my-px sm:ms-10 sm:flex">
+                <div class="hidden space-x-6 sm:-my-px sm:ms-10 sm:flex">
                     <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                         {{ __('Dashboard') }}
                     </x-nav-link>
+
+                    <x-nav-link :href="route('asteroids.index')" :active="request()->routeIs('asteroids.*')">
+                        {{ __('Asteroid Catalog') }}
+                    </x-nav-link>
+
+                    <x-nav-link :href="route('media.index')" :active="request()->routeIs('media.*')">
+                        {{ __('NASA Media') }}
+                    </x-nav-link>
+
                     <x-nav-link :href="route('watchlist.index')" :active="request()->routeIs('watchlist.*')">
                         {{ __('My Watchlist') }}
                     </x-nav-link>
@@ -73,6 +82,15 @@
             <x-responsive-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('asteroids.index')" :active="request()->routeIs('asteroids.*')">
+                {{ __('Asteroid Catalog') }}
+            </x-responsive-nav-link>
+
+            <x-responsive-nav-link :href="route('media.index')" :active="request()->routeIs('media.*')">
+                {{ __('NASA Media') }}
+            </x-responsive-nav-link>
+
             <x-responsive-nav-link :href="route('watchlist.index')" :active="request()->routeIs('watchlist.*')">
                 {{ __('My Watchlist') }}
             </x-responsive-nav-link>
