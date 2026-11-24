@@ -1,5 +1,8 @@
 <?php
 
+use App\Http\Controllers\AsteroidController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\WatchlistController;
 use Illuminate\Support\Facades\Route;
@@ -8,9 +11,17 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('dashboard');
+
+Route::get('/asteroids', [AsteroidController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('asteroids.index');
+
+Route::get('/media', [MediaController::class, 'index'])
+    ->middleware(['auth', 'verified'])
+    ->name('media.index');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

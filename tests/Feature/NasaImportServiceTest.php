@@ -9,6 +9,7 @@ use App\Jobs\DownloadNasaApodImage;
 use App\Models\Asteroid;
 use App\Models\CloseApproachEvent;
 use App\Models\NasaMedia;
+use App\Models\Tag;
 use App\Services\AsteroidHazardUpdater;
 use App\Services\NasaApiService;
 use App\Services\NasaImportService;
@@ -669,5 +670,109 @@ class NasaImportServiceTest extends TestCase
 
         Storage::disk('public')
             ->assertExists($oldPath);
+    }
+
+    public function test_apod_import_assigns_tags_without_duplicates_or_removing_manual_tags(): void
+    {
+        Queue::fake();
+
+        $galaxyTag = Tag::create([
+            'name' => 'Galaxy',
+        ]);
+
+        $telescopeTag = Tag::create([
+            'name' => 'Telescopes',
+        ]);
+
+        $moonTag = Tag::create([
+            'name' => 'Moon',
+        ]);
+
+        $api = Mockery::mock(NasaApiService::class);
+
+        $api->shouldReceive('getApod')
+            ->twice()
+            ->with('2026-11-13')
+            ->andReturn(new ApodData(
+                date: '2026-11-13',
+                title: 'The Andromeda Galaxy',
+                explanation: 'Observed using the Hubble Space Telescope.',
+                mediaType: 'video',
+                sourceUrl: 'https://example.com/space-video',
+                copyright: 'NASA',
+            ));
+
+        $this->app->instance(NasaApiService::class, $api);
+
+        // Перший імпорт: автоматично додаємо два теги.
+        $media = app(NasaImportService::class)
+            ->importApod('2026-11-13');
+
+        $this->assertEqualsCanonicalizing(
+            [$galaxyTag->id, $telescopeTag->id],
+            $media->tags()->pluck('tags.id')->all()
+        );
+
+        // Імітуємо тег, доданий вручну.
+        $media->tags()->attach($moonTag->id);
+
+        // Повторний імпорт тієї самої дати.
+        $reimported = app(NasaImportService::class)
+            ->importApod('2026-11-13');
+
+        // Повторний імпорт не створює другий APOD.
+        $this->assertSame($media->id, $reimported->id);
+
+        $this->assertDatabaseCount('nasa_media', 1);
+
+        // Усі три теги залишаються, дублікати відсутні.
+        $this->assertEqualsCanonicalizing(
+            [$galaxyTag->id, $telescopeTag->id, $moonTag->id],
+            $reimported->tags()->pluck('tags.id')->all()
+        );
+
+        $this->assertDatabaseCount('nasa_media_tag', 3);
+
+        // Для відео не запускаємо завантаження зображення.
+        Queue::assertNotPushed(DownloadNasaApodImage::class);
+    }
+
+    public function test_apod_import_works_when_matching_tags_do_not_exist(): void
+    {
+        Queue::fake();
+
+        $api = Mockery::mock(NasaApiService::class);
+
+        $api->shouldReceive('getApod')
+            ->once()
+            ->with('2026-11-14')
+            ->andReturn(new ApodData(
+                date: '2026-11-14',
+                title: 'Mars Exploration',
+                explanation: 'A rover explores the Martian surface.',
+                mediaType: 'video',
+                sourceUrl: 'https://example.com/mars-video',
+                copyright: 'NASA',
+            ));
+
+        $this->app->instance(NasaApiService::class, $api);
+
+        // У тестовій базі немає жодного тегу.
+        $this->assertDatabaseCount('tags', 0);
+
+        $media = app(NasaImportService::class)
+            ->importApod('2026-11-14');
+
+        $this->assertDatabaseHas('nasa_media', [
+            'id' => $media->id,
+            'title' => 'Mars Exploration',
+        ]);
+
+        // Імпорт працює навіть без відповідних тегів.
+        $this->assertCount(0, $media->tags);
+
+        $this->assertDatabaseCount('nasa_media_tag', 0);
+
+        Queue::assertNotPushed(DownloadNasaApodImage::class);
     }
 }
